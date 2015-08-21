@@ -62,6 +62,8 @@ namespace alpaka
         class ExecCpuSerial final :
             public workdiv::WorkDivMembers<TDim, TSize>
         {
+            static constexpr std::size_t blockFactor = 8;
+
         public:
             //-----------------------------------------------------------------------------
             //! Constructor.
@@ -158,18 +160,40 @@ namespace alpaka
                 // There is only ever one thread in a block in the serial accelerator.
                 assert(blockThreadExtents.prod() == 1u);
 
+                // Calculate the number of tiles for tiled execution.
+                auto gridTileExtents(Vec<TDim, TSize>::zeros());
+                auto tileBlockExtents(Vec<TDim, TSize>::zeros());
+                for(auto i(static_cast<TSize>(0)); i<TDim::value; ++i)
+                {
+                    gridTileExtents[i] = static_cast<TSize>(std::ceil(static_cast<float>(gridBlockExtents[i])/static_cast<float>(blockFactor)));
+                    tileBlockExtents[i] = static_cast<TSize>(std::ceil(static_cast<float>(gridBlockExtents[i])/static_cast<float>(gridTileExtents[i])));
+                }
+
                 // Execute the blocks serially.
                 core::ndLoopIncIdx(
-                    gridBlockExtents,
-                    [&](Vec<TDim, TSize> const & blockThreadIdx)
+                    gridTileExtents,
+                    [&](Vec<TDim, TSize> const & gridTileIdx)
                     {
-                        acc.m_gridBlockIdx = blockThreadIdx;
+                        core::ndLoopIncIdx(
+                            tileBlockExtents,
+                            [&](Vec<TDim, TSize> const & tileBlockIdx)
+                            {
+                                acc.m_gridBlockIdx = gridTileIdx * tileBlockExtents + tileBlockIdx;
 
-                        boundKernelFnObj(
-                            acc);
+                                bool bIsInsideGrid(true);
+                                for(auto i(static_cast<TSize>(0)); i<TDim::value; ++i)
+                                {
+                                    bIsInsideGrid = bIsInsideGrid && (acc.m_gridBlockIdx[i] < gridBlockExtents[i]);
+                                }
+                                if(bIsInsideGrid)
+                                {
+                                    boundKernelFnObj(
+                                        acc);
 
-                        // After a block has been processed, the shared memory has to be deleted.
-                        block::shared::freeMem(acc);
+                                    // After a block has been processed, the shared memory has to be deleted.
+                                    block::shared::freeMem(acc);
+                                }
+                            });
                     });
 
                 // After all blocks have been processed, the external shared memory has to be deleted.
