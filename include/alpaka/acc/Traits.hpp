@@ -56,6 +56,24 @@ namespace alpaka
             struct GetAccDevProps;
 
             //#############################################################################
+            //! The device properties get trait.
+            //#############################################################################
+            template<
+                typename TAcc,
+                typename TSfinae = void>
+            struct GetValidThreadElemExtends
+            {
+                template<
+                    typename TGridElemExtents>
+                ALPAKA_FN_HOST_ACC static auto getValidThreadElemExtends(
+                    TGridElemExtents const & gridElemExtents)
+                -> Vec<dim::Dim<TAcc>, size::Size<TAcc>>
+                {
+                    return Vec<dim::Dim<TAcc>, size::Size<TAcc>>::all(1u);
+                }
+            };
+
+            //#############################################################################
             //! The accelerator name trait.
             //!
             //! The default implementation returns the mangled class name.
@@ -97,6 +115,22 @@ namespace alpaka
                 ::getAccDevProps(
                     dev);
         }
+
+        //-----------------------------------------------------------------------------
+        //! \return The acceleration properties on the given device.
+        //-----------------------------------------------------------------------------
+        template<
+            typename TAcc,
+            typename TGridElemExtents>
+        ALPAKA_FN_HOST auto getValidThreadElemExtends(
+            TGridElemExtents const & gridElemExtents)
+        -> Vec<dim::Dim<TAcc>, size::Size<TAcc>>
+        {
+            return
+                traits::GetValidThreadElemExtends<
+                    TAcc>
+                ::getValidThreadElemExtends(
+                    gridElemExtents);
         }
 
         //-----------------------------------------------------------------------------

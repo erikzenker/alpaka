@@ -55,12 +55,15 @@ namespace alpaka
             ALPAKA_NO_HOST_ACC_WARNING
             template<
                 typename TGridBlockExtents,
-                typename TBlockThreadExtents>
+                typename TBlockThreadExtents,
+                typename TThreadElementExtents>
             ALPAKA_FN_HOST_ACC explicit WorkDivMembers(
                 TGridBlockExtents const & gridBlockExtents = TGridBlockExtents(),
-                TBlockThreadExtents const & blockThreadExtents = TBlockThreadExtents()) :
-                m_gridBlockExtents(extent::getExtentsVecEnd<TDim>(gridBlockExtents)),
-                m_blockThreadExtents(extent::getExtentsVecEnd<TDim>(blockThreadExtents))
+                TBlockThreadExtents const & blockThreadExtents = TBlockThreadExtents(),
+                TThreadElementExtents const & threadElementExtents = TThreadElementExtents()) :
+                    m_gridBlockExtents(extent::getExtentsVecEnd<TDim>(gridBlockExtents)),
+                    m_blockThreadExtents(extent::getExtentsVecEnd<TDim>(blockThreadExtents)),
+                    m_threadElemExtents(extent::getExtentsVecEnd<TDim>(threadElementExtents))
             {}
             //-----------------------------------------------------------------------------
             //! Copy constructor.
@@ -69,7 +72,8 @@ namespace alpaka
             ALPAKA_FN_HOST_ACC explicit WorkDivMembers(
                 WorkDivMembers const & other) :
                     m_gridBlockExtents(other.m_gridBlockExtents),
-                    m_blockThreadExtents(other.m_blockThreadExtents)
+                    m_blockThreadExtents(other.m_blockThreadExtents),
+                    m_threadElemExtents(other.m_threadElemExtents)
             {}
             //-----------------------------------------------------------------------------
             //! Copy constructor.
@@ -80,7 +84,8 @@ namespace alpaka
             ALPAKA_FN_HOST_ACC explicit WorkDivMembers(
                 TWorkDiv const & other) :
                     m_gridBlockExtents(vec::subVecEnd<TDim>(getWorkDiv<Grid, Blocks>(other))),
-                    m_blockThreadExtents(vec::subVecEnd<TDim>(getWorkDiv<Block, Threads>(other)))
+                    m_blockThreadExtents(vec::subVecEnd<TDim>(getWorkDiv<Block, Threads>(other))),
+                    m_threadElemExtents(vec::subVecEnd<TDim>(getWorkDiv<Thread, Elems>(other)))
             {}
             //-----------------------------------------------------------------------------
             //! Move constructor.
@@ -109,6 +114,7 @@ namespace alpaka
             {
                 m_gridBlockExtents = vec::subVecEnd<TDim>(getWorkDiv<Grid, Blocks>(other));
                 m_blockThreadExtents = vec::subVecEnd<TDim>(getWorkDiv<Block, Threads>(other));
+                m_threadElemExtents = vec::subVecEnd<TDim>(getWorkDiv<Thread, Elems>(other));
                 return *this;
             }
             //-----------------------------------------------------------------------------
@@ -120,6 +126,7 @@ namespace alpaka
         public:
             Vec<TDim, TSize> m_gridBlockExtents;
             Vec<TDim, TSize> m_blockThreadExtents;
+            Vec<TDim, TSize> m_threadElemExtents;
         };
 
         //-----------------------------------------------------------------------------
@@ -136,6 +143,7 @@ namespace alpaka
             return (os
                 << "{gridBlockExtents: " << workDiv.m_gridBlockExtents
                 << ", blockThreadExtents: " << workDiv.m_blockThreadExtents
+                << ", threadElementExtents: " << workDiv.m_threadElemExtents
                 << "}");
         }
     }
@@ -178,6 +186,29 @@ namespace alpaka
     {
         namespace traits
         {
+            //#############################################################################
+            //! The WorkDivMembers thread element extents trait specialization.
+            //#############################################################################
+            template<
+                typename TDim,
+                typename TSize>
+            struct GetWorkDiv<
+                WorkDivMembers<TDim, TSize>,
+                origin::Thread,
+                unit::Elems>
+            {
+                //-----------------------------------------------------------------------------
+                //! \return The number of elements in each dimension of a thread.
+                //-----------------------------------------------------------------------------
+                ALPAKA_NO_HOST_ACC_WARNING
+                ALPAKA_FN_HOST_ACC static auto getWorkDiv(
+                    WorkDivMembers<TDim, TSize> const & workDiv)
+                -> Vec<TDim, TSize>
+                {
+                    return workDiv.m_threadElemExtents;
+                }
+            };
+
             //#############################################################################
             //! The WorkDivMembers block thread extents trait specialization.
             //#############################################################################

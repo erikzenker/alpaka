@@ -155,6 +155,29 @@ namespace alpaka
                     return vec::cast<TSize>(extent::getExtentsVecEnd<TDim>(gridDim));
                 }
             };
+
+            //#############################################################################
+            //! The GPU CUDA accelerator work division thread element extents trait specialization.
+            //#############################################################################
+            template<
+                typename TDim,
+                typename TSize>
+            struct GetWorkDiv<
+                WorkDivCudaBuiltIn<TDim, TSize>,
+                origin::Thread,
+                unit::Elems>
+            {
+                //-----------------------------------------------------------------------------
+                //! \return The number of blocks in each dimension of the grid.
+                //-----------------------------------------------------------------------------
+                ALPAKA_FN_ACC_CUDA_ONLY static auto getWorkDiv(
+                    WorkDivCudaBuiltIn<TDim, TSize> const & /*workDiv*/)
+                -> Vec<TDim, TSize>
+                {
+                    //boost::ignore_unused(workDiv);
+                    return Vec<TDim, TSize>::ones();
+                }
+            };
         }
     }
 }

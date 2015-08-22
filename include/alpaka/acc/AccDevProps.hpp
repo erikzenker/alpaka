@@ -60,6 +60,7 @@ namespace alpaka
 
             TSize m_multiProcessorCount;                //!< The number of multiprocessors.
             TSize m_blockThreadsCountMax;               //!< The maximum number of threads in a block.
+            TSize m_threadElemsCountMax;                //!< The maximum number of elements in a threads.
             Vec<TDim, TSize> m_blockThreadExtentsMax;   //!< The maximum number of threads in each dimension of a block.
             Vec<TDim, TSize> m_gridBlockExtentsMax;     //!< The maximum number of blocks in each dimension of the grid.
         };

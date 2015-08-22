@@ -77,6 +77,25 @@ namespace alpaka
                     return 0;
                 }
             };
+
+            //#############################################################################
+            //! The trait for inquiring if the kernel supports vectorization.
+            //! The default implementation returns false.
+            //#############################################################################
+            template<
+                typename TKernelFnObj,
+                typename TSfinae = void>
+            struct SupportsVectorization
+            {
+                //-----------------------------------------------------------------------------
+                //!
+                //-----------------------------------------------------------------------------
+                ALPAKA_FN_HOST_ACC static auto supportsVectorization()
+                -> bool
+                {
+                    return false;
+                }
+            };
         }
 
         //-----------------------------------------------------------------------------
@@ -104,6 +123,21 @@ namespace alpaka
                 ::getBlockSharedExternMemSizeBytes(
                     blockThreadExtents,
                     args...);
+        }
+        //-----------------------------------------------------------------------------
+        //! \return If the kernel supports vectorization.
+        //! The default implementation always returns false.
+        //-----------------------------------------------------------------------------
+        ALPAKA_NO_HOST_ACC_WARNING
+        template<
+            typename TKernelFnObj>
+        ALPAKA_FN_HOST_ACC auto supportsVectorization()
+        -> bool
+        {
+            return
+                traits::SupportsVectorization<
+                    TKernelFnObj>
+                ::supportsVectorization();
         }
     }
 }

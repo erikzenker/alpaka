@@ -121,8 +121,10 @@ namespace alpaka
         //! 3. The requirement of the block thread extents to divide the grid thread extents without remainder
         //! 4. The requirement of the block extents.
         //!
-        //! \param gridThreadExtents
-        //!     The full extents of threads in the grid.
+        //! \param gridElemExtents
+        //!     The full extents of elements in the grid.
+        //! \param threadElemExtents
+        //!     The extents of elements per thread.
         //! \param blockThreadExtentsMax
         //!     The maximum extents of threads in a block.
         //! \param blockThreadsCountMax
@@ -137,17 +139,30 @@ namespace alpaka
             typename TDim,
             typename TSize>
         ALPAKA_FN_HOST auto subDivideGridThreads(
-            Vec<TDim, TSize> const & gridThreadExtents,
+            Vec<TDim, TSize> const & gridElemExtents,
+            Vec<TDim, TSize> const & threadElemExtents,
             Vec<TDim, TSize> const & blockThreadExtentsMax,
             TSize const & blockThreadsCountMax,
             bool requireBlockThreadExtentsToDivideGridThreadExtents = true,
             GridBlockExtentsSubDivRestrictions gridBlockExtentsSubDivRestrictions = GridBlockExtentsSubDivRestrictions::Unrestricted)
         -> workdiv::WorkDivMembers<TDim, TSize>
         {
+            // Calculate the grid
+            auto gridThreadExtents(Vec<TDim, TSize>::zeros());
+            for(typename TDim::value_type i(0u); i<TDim::value; ++i)
+            {
+                gridThreadExtents[i] =
+                    static_cast<TSize>(
+                        std::ceil(
+                            static_cast<double>(gridElemExtents[i])
+                            / static_cast<double>(threadElemExtents[i])));
+            }
+
             // Assert valid input.
             assert(blockThreadsCountMax>0u);
             for(typename TDim::value_type i(0u); i<TDim::value; ++i)
             {
+                assert(gridElemExtents[i]>0u);
                 assert(gridThreadExtents[i]>0u);
                 assert(blockThreadExtentsMax[i]>0u);
             }
@@ -301,17 +316,23 @@ namespace alpaka
             {
                 gridBlockExtents[i] =
                     static_cast<TSize>(
-                        std::ceil(static_cast<double>(gridThreadExtents[i])
-                        / static_cast<double>(blockThreadExtents[i])));
+                        std::ceil(
+                            static_cast<double>(gridThreadExtents[i])
+                            / static_cast<double>(blockThreadExtents[i])));
             }
 
-            return workdiv::WorkDivMembers<TDim, TSize>(gridBlockExtents, blockThreadExtents);
+            return
+                workdiv::WorkDivMembers<TDim, TSize>(
+                    gridBlockExtents,
+                    blockThreadExtents,
+                    threadElemExtents);
         }
 
         //-----------------------------------------------------------------------------
         //! \tparam TAcc The accelerator for which this work division has to be valid.
+        //! \tparam TKernelFnObj The kernel function object to be accelerated.
         //! \param dev The device for which this work division has to be valid.
-        //! \param gridThreadExtents The full extents of threads in the grid.
+        //! \param gridElemExtents The full extents of elmenets in the grid.
         //! \param requireBlockThreadExtentsToDivideGridThreadExtents If the grid thread extents have to be a multiple of the block thread extents.
         //! \param gridBlockExtentsSubDivRestrictions The grid block extent subdivision restrictions.
         //! \return The work division.
@@ -322,7 +343,7 @@ namespace alpaka
             typename TDev>
         ALPAKA_FN_HOST auto getValidWorkDiv(
             TDev const & dev,
-            TExtents const & gridThreadExtents = TExtents(),
+            TExtents const & gridElemExtents = TExtents(),
             bool requireBlockThreadExtentsToDivideGridThreadExtents = true,
             GridBlockExtentsSubDivRestrictions gridBlockExtentsSubDivRestrictions = GridBlockExtentsSubDivRestrictions::Unrestricted)
         -> workdiv::WorkDivMembers<dim::Dim<TExtents>, size::Size<TAcc>>
@@ -336,12 +357,14 @@ namespace alpaka
 
             auto const devProps(acc::getAccDevProps<TAcc>(dev));
 
-            return subDivideGridThreads(
-                extent::getExtentsVec(gridThreadExtents),
-                devProps.m_blockThreadExtentsMax,
-                devProps.m_blockThreadsCountMax,
-                requireBlockThreadExtentsToDivideGridThreadExtents,
-                gridBlockExtentsSubDivRestrictions);
+            return
+                subDivideGridThreads(
+                    extent::getExtentsVec(gridElemExtents),
+                    acc::getValidThreadElemExtends<TAcc>(gridElemExtents),
+                    devProps.m_blockThreadExtentsMax,
+                    devProps.m_blockThreadsCountMax,
+                    requireBlockThreadExtentsToDivideGridThreadExtents,
+                    gridBlockExtentsSubDivRestrictions);
         }
 
         //-----------------------------------------------------------------------------

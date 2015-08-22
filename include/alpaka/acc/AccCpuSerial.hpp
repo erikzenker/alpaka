@@ -190,6 +190,24 @@ namespace alpaka
                 }
             };
             //#############################################################################
+            //! The CPU serial accelerator thread element extent trait specialization.
+            //#############################################################################
+            template<
+                typename TDim,
+                typename TSize>
+            struct GetValidThreadElemExtends<
+                acc::AccCpuSerial<TDim, TSize>>
+            {
+                template<
+                    typename TGridElemExtents>
+                ALPAKA_FN_HOST_ACC static auto getValidThreadElemExtends(
+                    TGridElemExtents const & gridElemExtents)
+                -> Vec<TDim, TSize>
+                {
+                    return gridElemExtents;
+                }
+            };
+            //#############################################################################
             //! The CPU serial accelerator name trait specialization.
             //#############################################################################
             template<
