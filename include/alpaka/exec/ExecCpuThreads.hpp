@@ -1,4 +1,4 @@
-/**
+**
 * \file
 * Copyright 2014-2016 Benjamin Worpitz, Rene Widera
 *

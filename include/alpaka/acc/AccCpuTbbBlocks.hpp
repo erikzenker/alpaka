@@ -27,6 +27,7 @@
 #include <alpaka/workdiv/WorkDivMembers.hpp>    // workdiv::WorkDivMembers
 #include <alpaka/idx/gb/IdxGbRef.hpp>           // IdxGbRef
 #include <alpaka/idx/bt/IdxBtZero.hpp>          // IdxBtZero
+#include <alpaka/idx/bt/IdxBtRefThreadIdMap.hpp>// IdxBtRefThreadIdMap
 #include <alpaka/atomic/AtomicStlLock.hpp>      // AtomicStlLock
 #include <alpaka/math/MathStl.hpp>              // MathStl
 #include <alpaka/block/shared/dyn/BlockSharedMemDynBoostAlignedAlloc.hpp>   // BlockSharedMemDynBoostAlignedAlloc
@@ -73,7 +74,7 @@ namespace alpaka
         class AccCpuTbbBlocks final :
             public workdiv::WorkDivMembers<TDim, TSize>,
             public idx::gb::IdxGbRef<TDim, TSize>,
-            public idx::bt::IdxBtZero<TDim, TSize>,
+            public idx::bt::IdxBtRefThreadIdMap<TDim, TSize>,
             public atomic::AtomicStlLock,
             public math::MathStl,
             public block::shared::dyn::BlockSharedMemDynBoostAlignedAlloc,
@@ -102,7 +103,7 @@ namespace alpaka
                 TSize const & blockSharedMemDynSizeBytes) :
                     workdiv::WorkDivMembers<TDim, TSize>(workDiv),
                     idx::gb::IdxGbRef<TDim, TSize>(m_gridBlockIdx),
-                    idx::bt::IdxBtZero<TDim, TSize>(),
+                    idx::bt::IdxBtRefThreadIdMap<TDim, TSize>(m_threadToIndexMap),
                     atomic::AtomicStlLock(),
                     math::MathStl(),
                     block::shared::dyn::BlockSharedMemDynBoostAlignedAlloc(static_cast<std::size_t>(blockSharedMemDynSizeBytes)),
@@ -137,6 +138,8 @@ namespace alpaka
 
         private:
             // getIdx
+            std::mutex mutable m_mtxMapInsert;                              //!< The mutex used to secure insertion into the ThreadIdToIdxMap.
+            typename idx::bt::IdxBtRefThreadIdMap<TDim, TSize>::ThreadIdToIdxMap mutable m_threadToIndexMap;    //!< The mapping of thread id's to indices.
             Vec<TDim, TSize> mutable m_gridBlockIdx;   //!< The index of the currently executed block.
         };
     }

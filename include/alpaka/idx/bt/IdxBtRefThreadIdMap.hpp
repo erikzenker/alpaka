@@ -21,7 +21,7 @@
 
 #pragma once
 
-#ifdef ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+//#ifdef ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 
 #include <alpaka/idx/Traits.hpp>            // idx::getIdx
 
@@ -153,4 +153,4 @@ namespace alpaka
     }
 }
 
-#endif
+//#endif
