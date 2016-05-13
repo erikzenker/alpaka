@@ -21,18 +21,18 @@
 
 #pragma once
 
-#ifdef ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
+//#ifdef ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 
 // Base classes.
 #include <alpaka/workdiv/WorkDivMembers.hpp>    // workdiv::WorkDivMembers
 #include <alpaka/idx/gb/IdxGbRef.hpp>           // IdxGbRef
 #include <alpaka/idx/bt/IdxBtZero.hpp>          // IdxBtZero
-#include <alpaka/idx/bt/IdxBtRefThreadIdMap.hpp>// IdxBtRefThreadIdMap
+#include <alpaka/idx/bt/IdxBtTbbThreadIdMap.hpp>// IdxBtTbbThreadIdMap
 #include <alpaka/atomic/AtomicStlLock.hpp>      // AtomicStlLock
 #include <alpaka/math/MathStl.hpp>              // MathStl
 #include <alpaka/block/shared/dyn/BlockSharedMemDynBoostAlignedAlloc.hpp>   // BlockSharedMemDynBoostAlignedAlloc
-#include <alpaka/block/shared/st/BlockSharedMemStNoSync.hpp>                // BlockSharedMemStNoSync
-#include <alpaka/block/sync/BlockSyncNoOp.hpp>                        // BlockSyncNoOp
+#include <alpaka/block/shared/st/BlockSharedMemStMasterSync.hpp>                // BlockSharedMemStMasterSync
+#include <alpaka/block/sync/BlockSyncBarrierThread.hpp> // BlockSyncBarrierThread
 #include <alpaka/rand/RandStl.hpp>              // RandStl
 #include <alpaka/time/TimeStl.hpp>              // TimeStl
 
@@ -50,6 +50,9 @@
 
 #include <memory>                               // std::unique_ptr
 #include <typeinfo>                             // typeid
+
+#include <tbb/tbb_thread.h>
+
 
 namespace alpaka
 {
@@ -74,12 +77,12 @@ namespace alpaka
         class AccCpuTbbBlocks final :
             public workdiv::WorkDivMembers<TDim, TSize>,
             public idx::gb::IdxGbRef<TDim, TSize>,
-            public idx::bt::IdxBtRefThreadIdMap<TDim, TSize>,
+            public idx::bt::IdxBtTbbThreadIdMap<TDim, TSize>,
             public atomic::AtomicStlLock,
             public math::MathStl,
             public block::shared::dyn::BlockSharedMemDynBoostAlignedAlloc,
-            public block::shared::st::BlockSharedMemStNoSync,
-            public block::sync::BlockSyncNoOp,
+            public block::shared::st::BlockSharedMemStMasterSync,
+            public block::sync::BlockSyncBarrierThread<TSize>,
             public rand::RandStl,
             public time::TimeStl
         {
@@ -103,15 +106,19 @@ namespace alpaka
                 TSize const & blockSharedMemDynSizeBytes) :
                     workdiv::WorkDivMembers<TDim, TSize>(workDiv),
                     idx::gb::IdxGbRef<TDim, TSize>(m_gridBlockIdx),
-                    idx::bt::IdxBtRefThreadIdMap<TDim, TSize>(m_threadToIndexMap),
+                    idx::bt::IdxBtTbbThreadIdMap<TDim, TSize>(m_threadToIndexMap),
                     atomic::AtomicStlLock(),
                     math::MathStl(),
                     block::shared::dyn::BlockSharedMemDynBoostAlignedAlloc(static_cast<std::size_t>(blockSharedMemDynSizeBytes)),
-                    block::shared::st::BlockSharedMemStNoSync(),
-                    block::sync::BlockSyncNoOp(),
+                    block::shared::st::BlockSharedMemStMasterSync(
+                        [this](){block::sync::syncBlockThreads(*this);},
+                        [this](){return (m_idMasterThread == tbb::this_tbb_thread::get_id());}),
+                    block::sync::BlockSyncBarrierThread<TSize>(
+                        workdiv::getWorkDiv<Block, Threads>(workDiv).prod()),
                     rand::RandStl(),
                     time::TimeStl(),
-                    m_gridBlockIdx(Vec<TDim, TSize>::zeros())
+                    m_gridBlockIdx(Vec<TDim, TSize>::zeros()),
+                    m_blockThreadIdx(Vec<TDim, TSize>::zeros())
             {}
 
         public:
@@ -139,8 +146,12 @@ namespace alpaka
         private:
             // getIdx
             std::mutex mutable m_mtxMapInsert;                              //!< The mutex used to secure insertion into the ThreadIdToIdxMap.
-            typename idx::bt::IdxBtRefThreadIdMap<TDim, TSize>::ThreadIdToIdxMap mutable m_threadToIndexMap;    //!< The mapping of thread id's to indices.
+            typename idx::bt::IdxBtTbbThreadIdMap<TDim, TSize>::ThreadIdToIdxMap mutable m_threadToIndexMap;    //!< The mapping of thread id's to indices.
             Vec<TDim, TSize> mutable m_gridBlockIdx;   //!< The index of the currently executed block.
+            Vec<TDim, TSize> mutable m_blockThreadIdx;   //!< The index of the currently executed block.
+
+            // allocBlockSharedVar
+            tbb::tbb_thread::id mutable m_idMasterThread;                       //!< The id of the master thread.
         };
     }
 
@@ -177,6 +188,14 @@ namespace alpaka
                 {
                     boost::ignore_unused(dev);
 
+#if ALPAKA_CI
+                    auto const blockThreadCountMax(static_cast<TSize>(8));
+#else
+                    // \TODO: Magic number. What is the maximum? Just set a reasonable value? There is a implementation defined maximum where the creation of a new thread crashes.
+                    // std::thread::hardware_concurrency can return 0, so 1 is the default case?
+                    auto const blockThreadCountMax(std::max(static_cast<TSize>(1), static_cast<TSize>(std::thread::hardware_concurrency() * 8)));
+#endif
+
                     return {
                         // m_multiProcessorCount
                         static_cast<TSize>(1),
@@ -185,9 +204,9 @@ namespace alpaka
                         // m_gridBlockCountMax
                         std::numeric_limits<TSize>::max(),
                         // m_blockThreadExtentMax
-                        Vec<TDim, TSize>::ones(),
+                        Vec<TDim, TSize>::all(blockThreadCountMax),
                         // m_blockThreadCountMax
-                        static_cast<TSize>(1),
+                        static_cast<TSize>(blockThreadCountMax),
                         // m_threadElemExtentMax
                         Vec<TDim, TSize>::all(std::numeric_limits<TSize>::max()),
                         // m_threadElemCountMax
@@ -307,4 +326,4 @@ namespace alpaka
     }
 }
 
-#endif
+//#endif

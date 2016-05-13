@@ -21,7 +21,7 @@
 
 #pragma once
 
-#ifdef ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
+//#ifdef ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED
 
 // Specialized traits.
 #include <alpaka/acc/Traits.hpp>                // acc::traits::AccType
@@ -30,6 +30,7 @@
 #include <alpaka/exec/Traits.hpp>               // exec::traits::ExecType
 #include <alpaka/pltf/Traits.hpp>               // pltf::traits::PltfType
 #include <alpaka/size/Traits.hpp>               // size::traits::SizeType
+#include <alpaka/block/shared/st/Traits.hpp>
 
 // Implementation details.
 #include <alpaka/acc/AccCpuTbbBlocks.hpp>       // acc:AccCpuTbbBlocks
@@ -48,12 +49,13 @@
 #include <tuple>                                // std::tuple
 #include <type_traits>                          // std::decay
 #if ALPAKA_DEBUG >= ALPAKA_DEBUG_MINIMAL
-    #include <iostream>                         // std::cout
+#include <iostream>                         // std::cout
 #endif
 
 #include <tbb/parallel_for.h>
 #include <tbb/blocked_range.h>
 #include <tbb/task_group.h>
+#include <tbb/tbb_thread.h>
 
 namespace alpaka
 {
@@ -159,9 +161,7 @@ namespace alpaka
 
                 // The number of blocks in the grid.
                 TSize const numBlocksInGrid(gridBlockExtent.prod());
-
-                // There is only ever one thread in a block in the TBB accelerator.
-                assert(blockThreadExtent.prod() == 1u);
+                TSize const numThreadsInBlock(blockThreadExtent.prod());
 
                 tbb::parallel_for(
                     static_cast<TSize>(0),
@@ -171,18 +171,52 @@ namespace alpaka
                              *static_cast<workdiv::WorkDivMembers<TDim, TSize> const *>(this),
                              blockSharedMemDynSizeBytes);
 
-                         acc.m_gridBlockIdx =
-                             core::mapIdx<TDim::value>(
-                                 Vec<dim::DimInt<1u>, TSize>(
-                                     static_cast<TSize>(i)
-                                  ),
-                                  gridBlockExtent
-                             );
+                        acc.m_gridBlockIdx =
+                            core::mapIdx<TDim::value>(
+                                Vec<dim::DimInt<1u>, TSize>(
+                                    static_cast<TSize>(i)
+                                ),
+                                gridBlockExtent
+                            );
 
-                         boundKernelFnObj(acc);
+                        tbb::parallel_for(
+                            static_cast<TSize>(0),
+                            static_cast<TSize>(numThreadsInBlock),
+                            [&](TSize j){
 
-                         block::shared::st::freeMem(acc);
-                });
+                                acc.m_blockThreadIdx =
+                                    core::mapIdx<TDim::value>(
+                                        Vec<dim::DimInt<1u>, TSize>(
+                                            static_cast<TSize>(j)
+                                        ),
+                                        blockThreadExtent
+                                    );
+
+                                auto const threadId(tbb::this_tbb_thread::get_id());
+                                auto const blockThreadIdx(acc.m_blockThreadIdx);
+
+                                {
+                                    // The insertion of elements has to be done one thread at a time.
+                                    std::lock_guard<std::mutex> lock(acc.m_mtxMapInsert);
+
+                                    // Save the thread id, and index.
+                                    auto it = acc.m_threadToIndexMap.find(threadId);
+                                    if(it != acc.m_threadToIndexMap.end()){
+                                        acc.m_threadToIndexMap.erase(it);
+                                    }
+                                    acc.m_threadToIndexMap.emplace(threadId, blockThreadIdx);
+
+                                }
+
+                                boundKernelFnObj(acc);
+                            });
+
+                        acc.m_threadToIndexMap.clear();
+
+                        block::shared::st::freeMem(acc);
+                    });
+
+
 
             }
 
@@ -309,4 +343,4 @@ namespace alpaka
     }
 }
 
-#endif
+//#endif
